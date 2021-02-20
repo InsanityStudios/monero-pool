@@ -56,6 +56,15 @@ command:
 ```
 sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 ```
+
+# Arch Linux
+
+## Info Incomplete ##
+
+
+sudo pacman -s base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd
+
+
 ### Compile
 
 After installing all the dependencies as described above, to compile the pool as
