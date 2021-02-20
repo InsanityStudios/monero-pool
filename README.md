@@ -67,7 +67,7 @@ sudo pacman -Syu
 ## Install Monero Dependancies
 sudo pacman -S base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd git libevent json-c lmdb
 
-# Install uuid from the AUR
+## Install uuid from the AUR
 https://aur.archlinux.org/packages/uuid/
 
 ## Clone Monero Repository
