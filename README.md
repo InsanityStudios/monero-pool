@@ -61,8 +61,9 @@ sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 
 ## Info Incomplete ##
 
+sudo pacman -Syu
 
-sudo pacman -s base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd
+sudo pacman -S base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd
 
 
 ### Compile
