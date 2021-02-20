@@ -61,9 +61,21 @@ sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 
 ## Info Incomplete ##
 
+Update Repositories and system
 sudo pacman -Syu
 
-sudo pacman -S base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd
+## Install Monero Dependancies
+sudo pacman -S base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd git libevent json-c lmdb
+
+# Install uuid from the AUR
+https://aur.archlinux.org/packages/uuid/
+
+## Clone Monero Repository
+Clone recursively to pull-in needed submodules:
+git clone --recursive https://github.com/monero-project/monero
+
+cd monero
+make
 
 
 ### Compile
