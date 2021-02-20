@@ -59,12 +59,12 @@ sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 
 # Arch Linux
 
-## Info Incomplete ##
+## Update Repositories and System
 
-Update Repositories and system
 sudo pacman -Syu
 
 ## Install Monero Dependancies
+
 sudo pacman -S base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd git libevent json-c lmdb
 
 ## Install uuid from the AUR
