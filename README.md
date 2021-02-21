@@ -72,6 +72,7 @@ https://aur.archlinux.org/packages/uuid/
 
 ## Clone Monero Repository
 Clone recursively to pull-in needed submodules:
+
 git clone --recursive https://github.com/monero-project/monero
 
 cd monero
