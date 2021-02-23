@@ -52,10 +52,11 @@ to build the pool:
 
 
 # Debian / Ubuntu Server Dependancies 
-```
-sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
-```
-sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libssl-dev libzmq3-dev libunbound-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev libldns-dev libexpat1-dev doxygen graphviz libpgm-dev qttools5-dev-tools libhidapi-dev libusb-1.0-0-dev libprotobuf-dev protobuf-compiler libudev-dev
+
+Set up Hugepages https://wiki.debian.org/Hugepages
+
+
+sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libssl-dev libzmq3-dev libunbound-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev libldns-dev libexpat1-dev doxygen graphviz libpgm-dev qttools5-dev-tools libhidapi-dev libusb-1.0-0-dev libprotobuf-dev protobuf-compiler libudev-dev liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 
 
 # Arch Linux
@@ -67,6 +68,10 @@ sudo pacman -Syu
 ## Install Monero Dependancies
 
 sudo pacman -S base-devel cmake boost openssl zeromq libpgm unbound libsodium libunwind xz readline ldns expat gtest doxygen graphviz qt5-tools hidapi libusb protobuf systemd git libevent json-c lmdb xxd
+
+## Enable Hugepages
+
+https://wiki.archlinux.org/index.php/KVM
 
 ## Install uuid from the AUR
 https://aur.archlinux.org/packages/uuid/
