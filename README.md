@@ -50,12 +50,13 @@ to build the pool:
 - json-c
 - uuid
 
-As an example, on Ubuntu, these dependencies can be installed with the following
-command:
 
+# Debian / Ubuntu Server Dependancies 
 ```
 sudo apt-get install liblmdb-dev libevent-dev libjson-c-dev uuid-dev
 ```
+sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libssl-dev libzmq3-dev libunbound-dev libsodium-dev libunwind8-dev liblzma-dev libreadline6-dev libldns-dev libexpat1-dev doxygen graphviz libpgm-dev qttools5-dev-tools libhidapi-dev libusb-1.0-0-dev libprotobuf-dev protobuf-compiler libudev-dev
+
 
 # Arch Linux
 
