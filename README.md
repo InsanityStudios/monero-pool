@@ -50,6 +50,11 @@ to build the pool:
 - json-c
 - uuid
 
+# Fedora Server Dependsancies
+
+sudo dnf install gcc cmake pkgconf boost-devel openssl-devel zeromq-devel openpgm-devel unbound-devel libsodium-devel libunwind-devel xz-devel readline-devel ldns-devel expat-devel gtest-devel doxygen graphviz qt5-linguist hidapi-devel libusbx-devel protobuf-devel systemd-devel
+
+
 
 # Debian / Ubuntu Server Dependancies 
 
@@ -71,6 +76,7 @@ sudo pacman -S base-devel cmake boost openssl zeromq libpgm unbound libsodium li
 https://wiki.archlinux.org/index.php/KVM
 
 ## Install uuid from the AUR
+
 https://aur.archlinux.org/packages/uuid/
 
 ## Clone Monero Repository
