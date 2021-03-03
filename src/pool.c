@@ -285,7 +285,7 @@ static struct event *listener_event;
 static struct event *timer_30s;
 static struct event *timer_120s;
 static struct event *timer_10m;
-static struct event *signal_usr1;
+static struct event *signal_urg;
 static uint32_t extra_nonce;
 static uint32_t instance_id;
 static block_t block_headers_range[BLOCK_HEADERS_RANGE];
@@ -1771,7 +1771,7 @@ rpc_on_block_template(const char* data, rpc_callback_t *callback)
 }
 
 static int
-startup_scan_round_shares(void)
+startup_scan_round_shares()
 {
     int rc = 0;
     char *err = NULL;
@@ -2269,7 +2269,7 @@ fetch_last_block_header(void)
 }
 
 static int
-store_last_height_time(void)
+store_last_height_time()
 {
     int rc = 0;
     char *err = NULL;
@@ -2341,7 +2341,7 @@ trusted_send_balance(client_t *client, const char *address)
 }
 
 static void
-upstream_send_ping(void)
+upstream_send_ping()
 {
     struct evbuffer *output = bufferevent_get_output(upstream_event);
     char data[9];
@@ -2367,7 +2367,7 @@ upstream_send_account_connect(uint32_t count)
 }
 
 static void
-upstream_send_account_disconnect(void)
+upstream_send_account_disconnect()
 {
     struct evbuffer *output = bufferevent_get_output(upstream_event);
     char data[9];
@@ -2435,7 +2435,7 @@ upstream_send_client_block(block_t *block)
 }
 
 static void
-upstream_send_backlog(void)
+upstream_send_backlog()
 {
     /*
       Send any unsent shares and blocks upstream.
@@ -2716,7 +2716,7 @@ upstream_on_event(struct bufferevent *bev, short error, void *ctx)
 }
 
 static void
-upstream_connect(void)
+upstream_connect()
 {
     struct addrinfo *info = NULL;
     int rc = 0;
@@ -3072,16 +3072,8 @@ miner_on_block_template(json_object *message, client_t *client)
     if (dh > TEMLATE_HEIGHT_VARIANCE)
     {
         char m[64] = {0};
-        snprintf(m, 64, "Bad height delta: %"PRIu64, dh);
-        send_validation_error(client, m);
-        return;
-    }
-
-    int64_t d = json_object_get_int64(difficulty);
-    if (d < (int64_t)pool_stats.network_difficulty)
-    {
-        char m[64] = {0};
-        snprintf(m, 64, "Low difficulty: %"PRIu64, d);
+        snprintf(m, 64, "Bad height. "
+                "Differs to pool by %"PRIu64" blocks.", dh);
         send_validation_error(client, m);
         return;
     }
@@ -3110,8 +3102,8 @@ miner_on_block_template(json_object *message, client_t *client)
 
     job->miner_template = calloc(1, sizeof(block_template_t));
     job->miner_template->blocktemplate_blob = strdup(btb);
-    job->miner_template->difficulty = d;
-    job->miner_template->height = h;
+    job->miner_template->difficulty = json_object_get_int64(difficulty);
+    job->miner_template->height = json_object_get_int64(height);
     strncpy(job->miner_template->prev_hash,
             json_object_get_string(prev_hash), 64);
 
@@ -4030,8 +4022,7 @@ read_config(const char *config_file)
     }
 }
 
-static void
-print_config(void)
+static void print_config()
 {
     char display_allowed[MAX_HOST*MAX_DOWNSTREAM] = {0};
     if (*config.trusted_allowed[0])
@@ -4064,8 +4055,8 @@ print_config(void)
         "  pool-fee-wallet = %s\n"
         "  pool-start-diff = %"PRIu64"\n"
         "  pool-fixed-diff = %"PRIu64"\n"
-        "  pool-fee = %g\n"
-        "  payment-threshold = %g\n"
+        "  pool-fee = %.3f\n"
+        "  payment-threshold = %.2f\n"
         "  share-mul = %.2f\n"
         "  retarget-time = %u\n"
         "  retarget-ratio = %.2f\n"
@@ -4123,7 +4114,7 @@ print_config(void)
 }
 
 static void
-sigusr1_handler(evutil_socket_t fd, short event, void *arg)
+sigurg_handler(evutil_socket_t fd, short event, void *arg)
 {
     log_trace("Fetching last block header from signal");
     fetch_last_block_header();
@@ -4258,8 +4249,8 @@ run(void)
         goto bail;
     }
 
-    signal_usr1 = evsignal_new(pool_base, SIGUSR1, sigusr1_handler, NULL);
-    event_add(signal_usr1, NULL);
+    signal_urg = evsignal_new(pool_base, SIGURG, sigurg_handler, NULL);
+    event_add(signal_urg, NULL);
 
     if (*config.trusted_listen && config.trusted_port)
     {
@@ -4329,8 +4320,8 @@ cleanup(void)
         bufferevent_free(upstream_event);
     if (config.webui_port)
         stop_web_ui();
-    if (signal_usr1)
-        event_free(signal_usr1);
+    if (signal_urg)
+        event_free(signal_urg);
     if (trusted_base)
         event_base_loopbreak(trusted_base);
     if (pool_base)
