@@ -71,7 +71,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define MAX_LINE 8192
 #define CLIENTS_INIT 8192
-#define RPC_BODY_MAX 8192
+#define RPC_BODY_MAX 65536
 #define JOB_BODY_MAX 8192
 #define ERROR_BODY_MAX 512
 #define STATUS_BODY_MAX 512
@@ -93,6 +93,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MAX_BAD_SHARES 5
 #define MAX_DOWNSTREAM 8
 #define MAX_HOST 256
+#define MAX_RIG_ID 32
 
 #define uint128_t unsigned __int128
 
@@ -163,7 +164,9 @@ typedef struct config_t
     char pool_listen[MAX_HOST];
     uint16_t pool_port;
     uint16_t pool_ssl_port;
+    uint32_t pool_syn_backlog;
     uint32_t log_level;
+    char webui_listen[MAX_HOST];
     uint16_t webui_port;
     char log_file[MAX_PATH];
     bool block_notified;
@@ -217,6 +220,7 @@ typedef struct client_t
     char address[ADDRESS_MAX];
     char worker_id[64];
     char client_id[32];
+    char rig_id[MAX_RIG_ID];
     char agent[256];
     bstack_t *active_jobs;
     uint64_t hashes;
@@ -745,6 +749,54 @@ cleanup:
     if (txn)
         mdb_txn_abort(txn);
     return balance;
+}
+
+uint64_t
+worker_count(const char *address)
+{
+    account_t *account = NULL;
+    uint64_t wc = 0;
+    pthread_rwlock_rdlock(&rwlock_acc);
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
+        goto bail;
+    wc = (uint64_t)account->worker_count;
+bail:
+    pthread_rwlock_unlock(&rwlock_acc);
+    return wc;
+}
+
+void
+worker_list(char *list_start, char *list_end, const char *address)
+{
+    char *body = list_start;
+    char *end = list_end;
+    account_t *account = NULL;
+
+    if (strlen(address) > ADDRESS_MAX)
+        return;
+    pthread_rwlock_rdlock(&rwlock_acc);
+    HASH_FIND_STR(accounts, address, account);
+    if (!account)
+        goto bail;
+
+    client_t *c = (client_t*)gbag_first(bag_clients);
+    while ((c = gbag_next(bag_clients, 0)) && body < (end-MAX_RIG_ID-4))
+    {
+        if (strncmp(c->address, address, ADDRESS_MAX) == 0)
+        {
+            if(body == list_start)
+            {
+                body = stecpy(body, "\"", end);
+            }
+            else
+                body = stecpy(body, ",\"", end);
+            body = stecpy(body, c->rig_id, end);
+            body = stecpy(body, "\"", end);
+        }
+    }
+bail:
+    pthread_rwlock_unlock(&rwlock_acc);
 }
 
 static int
@@ -1868,7 +1920,7 @@ startup_payout(uint64_t height)
         if (!upstream_event)
             pool_stats.last_block_found = block->timestamp;
 
-        if (block->height > height - 60)
+        if (block->height + 60 > height)
             continue;
         if (block->status != BLOCK_LOCKED)
             continue;
@@ -1972,13 +2024,16 @@ rpc_on_last_block_header(const char* data, rpc_callback_t *callback)
         rpc_callback_t *cb1 = rpc_callback_new(rpc_on_block_template, 0, 0);
         rpc_request(pool_base, body, cb1);
 
-        uint64_t end = top->height - 60;
-        uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
-        rpc_get_request_body(body, "get_block_headers_range", "sdsd",
-                "start_height", start, "end_height", end);
-        rpc_callback_t *cb2 = rpc_callback_new(
-                rpc_on_block_headers_range, 0, 0);
-        rpc_request(pool_base, body, cb2);
+        if (top->height >= BLOCK_HEADERS_RANGE + 60 - 1)
+        {
+            uint64_t end = top->height - 60;
+            uint64_t start = end - BLOCK_HEADERS_RANGE + 1;
+            rpc_get_request_body(body, "get_block_headers_range", "sdsd",
+                    "start_height", start, "end_height", end);
+            rpc_callback_t *cb2 = rpc_callback_new(
+                    rpc_on_block_headers_range, 0, 0);
+            rpc_request(pool_base, body, cb2);
+        }
     }
 
     json_object_put(root);
@@ -2951,6 +3006,8 @@ miner_on_login(json_object *message, client_t *client)
     JSON_GET_OR_ERROR(pass, params, json_type_string, client);
     client->mode = MODE_NORMAL;
     json_object *mode = NULL;
+    json_object *rig_id = NULL;
+
     if (json_object_object_get_ex(params, "mode", &mode))
     {
         if (!json_object_is_type(mode, json_type_string))
@@ -2969,6 +3026,18 @@ miner_on_login(json_object *message, client_t *client)
                 client->mode = MODE_SELF_SELECT;
                 log_trace("Miner login for mode: self-select");
             }
+        }
+    }
+
+    if (json_object_object_get_ex(params, "rigid", &rig_id))
+    {
+        if (!json_object_is_type(rig_id, json_type_string))
+            log_warn("rigid not a json_type_string");
+        else
+        {
+            const char *rigstr = json_object_get_string(rig_id);
+            strncpy(client->rig_id, rigstr, MAX_RIG_ID-1);
+            log_trace("Miner set rigid: %s", client->rig_id);
         }
     }
 
@@ -3179,8 +3248,10 @@ miner_on_submit(json_object *message, client_t *client)
         return;
     }
 
-    log_trace("Miner submitted nonce=%u, result=%s",
-            result_nonce, result_hex);
+    log_trace("Miner submitted nonce=%u, result=%s, host=%s:%u, "
+            "address=%s, rig_id=%s",
+            result_nonce, result_hex, client->host, client->port,
+            client->address, client->rig_id);
     /*
       1. Validate submission
          active_job->blocktemplate_blob to bin
@@ -3739,6 +3810,10 @@ log_lock(void *ud, int lock)
 static void
 read_config(const char *config_file)
 {
+    char line[1024] = {0};
+    char path[MAX_PATH] = {0};
+    FILE *fp = NULL;
+
     /* Start with some defaults for any missing... */
     strcpy(config.rpc_host, "127.0.0.1");
     config.rpc_port = 18081;
@@ -3753,7 +3828,9 @@ read_config(const char *config_file)
     strcpy(config.pool_listen, "0.0.0.0");
     config.pool_port = 4242;
     config.pool_ssl_port = 0;
+    config.pool_syn_backlog = 16;
     config.log_level = 5;
+    strcpy(config.webui_listen, "0.0.0.0");
     config.webui_port = 4243;
     config.block_notified = false;
     config.disable_self_select = false;
@@ -3762,7 +3839,6 @@ read_config(const char *config_file)
     strcpy(config.data_dir, "./data");
     config.cull_shares = -1;
 
-    char path[MAX_PATH] = {0};
     if (config_file)
     {
         strncpy(path, config_file, MAX_PATH-1);
@@ -3771,7 +3847,7 @@ read_config(const char *config_file)
     {
         if (!getcwd(path, MAX_PATH))
         {
-            log_fatal("Cannot getcwd (%s). Aborting.", errno);
+            log_fatal("Cannot getcwd (%d). Aborting.", errno);
             exit(-1);
         }
         strcat(path, "/pool.conf");
@@ -3789,27 +3865,25 @@ read_config(const char *config_file)
     }
     log_info("Reading config from: %s", path);
 
-    FILE *fp = fopen(path, "r");
+    fp = fopen(path, "r");
     if (!fp)
     {
         log_fatal("Cannot open config file. Aborting.");
         exit(-1);
     }
-    char line[1024] = {0};
-    char *key;
-    char *val;
-    const char *tok = " =";
     while (fgets(line, sizeof(line), fp))
     {
+        char *key = NULL, *val = NULL, *brk = NULL;
         if (*line == '#')
             continue;
-        key = strtok(line, tok);
-        if (!key)
+        brk = strchr(line, '=');
+        if (!brk)
             continue;
-        val = strtok(NULL, tok);
-        if (!val)
-            continue;
-        val[strcspn(val, "\r\n")] = 0;
+        *brk++ = 0;
+        key = trim(line);
+        brk[strcspn(brk, "\r\n")] = 0;
+        val = trim(brk);
+
         if (strcmp(key, "pool-listen") == 0)
         {
             strncpy(config.pool_listen, val, sizeof(config.pool_listen)-1);
@@ -3821,6 +3895,14 @@ read_config(const char *config_file)
         else if (strcmp(key, "pool-ssl-port") == 0)
         {
             config.pool_ssl_port = atoi(val);
+        }
+        else if (strcmp(key, "pool-syn-backlog") == 0)
+        {
+            config.pool_syn_backlog = atoi(val);
+        }
+        else if (strcmp(key, "webui-listen") == 0)
+        {
+            strncpy(config.webui_listen, val, sizeof(config.webui_listen)-1);
         }
         else if (strcmp(key, "webui-port") == 0)
         {
@@ -3836,7 +3918,8 @@ read_config(const char *config_file)
         }
         else if (strcmp(key, "wallet-rpc-host") == 0)
         {
-            strncpy(config.wallet_rpc_host, val, sizeof(config.rpc_host)-1);
+            strncpy(config.wallet_rpc_host, val,
+                    sizeof(config.wallet_rpc_host)-1);
         }
         else if (strcmp(key, "wallet-rpc-port") == 0)
         {
@@ -4048,6 +4131,8 @@ static void print_config()
         "  pool-listen = %s\n"
         "  pool-port = %u\n"
         "  pool-ssl-port = %u\n"
+        "  pool-syn-backlog = %u\n"
+        "  webui-listen = %s\n"
         "  webui-port= %u\n"
         "  rpc-host = %s\n"
         "  rpc-port = %u\n"
@@ -4083,6 +4168,8 @@ static void print_config()
         config.pool_listen,
         config.pool_port,
         config.pool_ssl_port,
+        config.pool_syn_backlog,
+        config.webui_listen,
         config.webui_port,
         config.rpc_host,
         config.rpc_port,
@@ -4174,7 +4261,7 @@ trusted_run(void *ctx)
     freeaddrinfo(info);
     info = NULL;
 
-    if (listen(listener, 16)<0)
+    if (listen(listener, config.pool_syn_backlog)<0)
     {
         perror("listen");
         goto bail;
@@ -4239,7 +4326,7 @@ run(void)
     freeaddrinfo(info);
     info = NULL;
 
-    if (listen(listener, 16)<0)
+    if (listen(listener, config.pool_syn_backlog)<0)
     {
         perror("listen");
         goto bail;
@@ -4555,10 +4642,10 @@ int main(int argc, char **argv)
 
     wui_context_t uic;
     memset(&uic, 0, sizeof(wui_context_t));
+    strncpy(uic.listen, config.webui_listen, sizeof(uic.listen)-1);
     uic.port = config.webui_port;
     uic.pool_stats = &pool_stats;
     uic.pool_fee = config.pool_fee;
-    strncpy(uic.pool_listen, config.pool_listen, sizeof(uic.pool_listen)-1);
     uic.pool_port = config.pool_port;
     uic.pool_ssl_port = config.pool_ssl_port;
     uic.allow_self_select = !config.disable_self_select;
