@@ -289,7 +289,7 @@ static struct event *listener_event;
 static struct event *timer_30s;
 static struct event *timer_120s;
 static struct event *timer_10m;
-static struct event *signal_urg;
+static struct event *signal_usr1;
 static uint32_t extra_nonce;
 static uint32_t instance_id;
 static block_t block_headers_range[BLOCK_HEADERS_RANGE];
@@ -4205,7 +4205,7 @@ static void print_config()
 }
 
 static void
-sigurg_handler(evutil_socket_t fd, short event, void *arg)
+sigusr1_handler(evutil_socket_t fd, short event, void *arg)
 {
     log_trace("Fetching last block header from signal");
     fetch_last_block_header();
@@ -4340,8 +4340,8 @@ run(void)
         goto bail;
     }
 
-    signal_urg = evsignal_new(pool_base, SIGURG, sigurg_handler, NULL);
-    event_add(signal_urg, NULL);
+    signal_usr1 = evsignal_new(pool_base, SIGUSR1, sigusr1_handler, NULL);
+    event_add(signal_usr1, NULL);
 
     if (*config.trusted_listen && config.trusted_port)
     {
@@ -4411,8 +4411,8 @@ cleanup(void)
         bufferevent_free(upstream_event);
     if (config.webui_port)
         stop_web_ui();
-    if (signal_urg)
-        event_free(signal_urg);
+    if (signal_usr1)
+        event_free(signal_usr1);
     if (trusted_base)
         event_base_loopbreak(trusted_base);
     if (pool_base)
